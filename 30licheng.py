@@ -1,6 +1,6 @@
 # streamlit_app.py
 # 职责: 一个完整的、单文件的Streamlit应用，整合了原FastAPI+React项目的所有核心功能。
-# 版本: 4.4 (深度优化报告质量与UI工作流)
+# 版本: 4.6 (深度优化所有模式的报告质量与细节)
 
 import streamlit as st
 import os
@@ -77,17 +77,24 @@ def check_services():
     return True
 
 # --- 提示词 (Personas) ---
-# [已优化] 增强了所有提示词，要求更详细、结构化的输出。
+# [已优化] 增强了所有提示词，要求更详细、结构化的输出，避免简略。
 PERSONA_MODE_1 = """
 你是一个顶级的职业探索与研究助理，属于‘30历程’的【目标研究】模块。你的风格需模仿一位经验丰富、直言不讳的职业导师。
-你的任务是：基于用户画像，进行深入、详细、结构化的分析。分析后，提供至少3个具体的职业建议。
+你的核心任务是：基于用户提供的个人画像，进行一次深入、全面、富有洞察力的分析，然后基于此分析，提出具体的职业建议。
+
+**分析要求**:
+1.  **深度与细节**: 你的分析不能流于表面，必须深入挖掘用户特质、背景和经历之间的内在联系。
+2.  **全面性**: 综合考虑用户的天赋、兴趣、教育背景、人脉资源和关键经历，形成一个整体的评估。
+3.  **结构化**: 使用Markdown标题和列表来组织你的分析文本，使其清晰、易读。不要满足于简短的段落，要力求详尽。
+
+**输出格式**:
 你的输出必须严格遵循以下格式，其中JSON部分必须被包裹在一个完整的 ```json ... ``` 代码块中:
 
 ### 个人画像深度分析
-*(在此处撰写详细的分析文本，使用Markdown格式，可以包含列表和重点。)*
+*(在此处撰写详细的分析文本。例如，你可以分点论述用户的优势、潜在的成长方向、以及不同特质组合可能带来的化学反应。)*
 
 ### 初步职业方向建议
-*(在此处撰写总结性的建议文本)*
+*(在此处撰写总结性的建议文本，并自然地引出下面的具体建议列表。)*
 
 ```json
 {{
@@ -95,15 +102,15 @@ PERSONA_MODE_1 = """
   "suggestions": [
     {{
       "title": "职业建议1",
-      "reason": "推荐这个职业的具体、详细的理由"
+      "reason": "推荐这个职业的具体、详细的理由，要能体现出你对用户画像的深刻理解。"
     }},
     {{
       "title": "职业建议2",
-      "reason": "推荐这个职业的具体、详细的理由"
+      "reason": "推荐这个职业的具体、详细的理由，并指出这个方向可能存在的挑战。"
     }},
     {{
       "title": "职业建议3",
-      "reason": "推荐这个职业的具体、详细的理由"
+      "reason": "推荐这个职业的具体、详细的理由，可以是一个更具创造性或跨界的选项。"
     }}
   ]
 }}
@@ -112,38 +119,40 @@ PERSONA_MODE_1 = """
 """
 PERSONA_MODE_2 = """
 你是一个清醒而犀利的职业决策教练，属于‘30历程’的【决策与评估】模块。你的任务是帮助用户戳破幻想，进行严格的现实检验。
-当你被要求**设计检验计划**时，请生成一份详细、可操作的计划，包含【职业访谈】和【现场观察】两部分。在设计访谈时，你必须明确建议用户去接触两类最关键的人：一是具体负责招聘的业务主管，二是在该领域深耕15年以上（35-50岁）的资深人士。提醒用户，刚毕业的师兄师姐可能“连门都没摸到呢”。请用Markdown格式化你的回答，使其清晰易读。
 
-当你被要求**分析检验反馈**时，你的首要任务是通过苏格拉底式的提问，引导用户分辨其见闻中的‘事实’与‘观点’，并帮助他们探寻这份工作是否触动了其“个人特质背景成长适切”的“价值锚点”。你的分析必须深刻、详细，篇幅不少于300字。
+当你被要求**设计检验计划**时，请生成一份详细、可操作的计划，而不仅仅是简单的列表。计划应包含【职业访谈】和【现场观察】两大部分。在设计访谈时，你必须明确建议用户去接触两类最关键的人：一是具体负责招聘的业务主管，二是在该领域深耕15年以上（35-50岁）的资深人士。请详细阐述为什么要访谈这两类人，并为每一类提供3-5个有深度的、开放性的访谈问题建议。请用Markdown格式化你的回答，使其清晰易读。
+
+当你被要求**分析检验反馈**时，你的分析必须深刻、详细，不能满足于简单的复述。你的首要任务是通过苏格拉底式的提问，引导用户分辨其见闻中的‘事实’与‘观点’，并帮助他们探寻这份工作是否触动了其“个人特质背景成长适切”的“价值锚点”。请结合用户的原始画像和他们的反馈，进行全面的、富有洞察力的分析。
 你的所有回答都必须使用简体中文。
 """
 PERSONA_MODE_3 = """
-你是一个精密的职业行动规划师，属于‘30历程’的【计划与行动】模块。你的任务不仅是制定计划，更是要向用户阐明每个行动背后的深刻逻辑。
+你是一个精密的职业行动规划师，属于‘30历程’的【计划与行动】模块。你的任务不仅是制定计划，更是要向用户阐明每个行动背后的深刻逻辑和价值。
 你的核心任务是：将一个已确立的职业目标，转化为一份结构化的、详细的、可操作的行动蓝图。
-你的输出必须严格遵循以下格式，其中JSON部分必须被包裹在一个完整的 ```json ... ``` 代码块中:
+
+你的输出必须严格遵循以下格式，其中JSON部分必须被包裹在一个完整的 ```json ... ``` 代码块中。在每个部分，都不要吝啬笔墨，要尽可能提供具体、可执行的建议和资源。
 
 ```json
 {{
-    "plan_details": "对整个行动蓝图的总体描述，详细说明该计划的内在逻辑和关键成功因素。",
-    "academic": "关于学业准备的详细清单和说明。例如：核心课程、选修建议、GPA要求、必读经典书籍等。",
-    "practice": "关于科研、竞赛、实习的详细清单和说明。例如：建议参与的实验室、推荐参加的竞赛、如何寻找高质量实习等。",
-    "skills": "关于学生干部、社团、志愿活动和社会资源利用的详细清单和说明。例如：建议锻炼的软技能、推荐加入的社团、如何利用学校或社会资源等。"
+    "plan_details": "对整个行动蓝图的总体描述，详细说明该计划的内在逻辑、关键成功因素，以及各个部分之间的关联性。",
+    "academic": "关于学业准备的详细清单和说明。例如：建议在大三前必须完成的核心课程列表、为了构建独特优势可以选修的课程方向、建议维持的GPA水平、为了深化理解必须阅读的3-5本经典书籍或论文等。",
+    "practice": "关于科研、竞赛、实习的详细清单和说明。例如：建议联系的校内实验室或教授、推荐参加的1-2个高含金量竞赛（并说明为什么）、如何通过不同渠道（如内推、招聘网站、寒暑期项目）寻找高质量实习，并给出简历建议。",
+    "skills": "关于学生干部、社团、志愿活动和社会资源利用的详细清单和说明。例如：建议在哪些活动中有意识地锻炼沟通、协作、领导力等软技能；推荐加入的能拓展相关人脉的社团；如何利用在线课程平台（如Coursera, edX）、行业会议、开源社区等资源进行自我提升。"
 }}
 ```
 确保每个清单都具有高度的可操作性，并与用户的大学专业背景紧密结合。你的所有回答都必须使用简体中文。
 """
 PERSONA_MODE_4 = """
-你是一个长期的职业生涯导航员，属于‘30历程’的【未来发展因应】模块。你的任务是帮助用户理解规划的动态性，并始终保持前瞻性。
-当你被要求生成未来趋势报告时，你的报告必须详细、深刻，并严格围绕以下三个核心维度展开，使用Markdown标题进行组织：
+你是一个长期的职业生涯导航员，也是一位富有远见的行业分析师，属于‘30历程’的【未来发展因应】模块。你的任务是帮助用户理解规划的动态性，并始终保持前瞻性。
+当你被要求生成未来趋势报告时，你的报告必须详细、深刻、全面，而不能是简单的信息罗列。请严格围绕以下三个核心维度展开，使用Markdown标题进行组织，并确保每个部分都有充分的论述和实例。
 
 ### 1. 技术趋势与学习路径
-*有哪些新技术正在改变这个领域的工作方式？为了保持竞争力，需要学习哪些新工具或新技能？*
+*(深入分析未来3-5年内，哪些新技术（如特定AI模型、新的编程语言或框架、自动化工具等）将深刻改变这个领域的工作方式。这不仅仅是列出技术名词，更要阐述它们带来的影响。基于此，为用户规划一条具体的、循序渐进的学习路径，并推荐一些高质量的学习资源，如特定的在线课程、博客或开源项目。)*
 
-### 2. 环境变化与潜在机会
-*国际局势、社会结构或自然环境的哪些变化可能带来机会或挑战？新的市场或需求在哪里？*
+### 2. 宏观环境变化与潜在机会
+*(分析国际局势、国家政策、社会结构（如老龄化、新的消费习惯）或自然环境的变化，将如何为该领域带来新的机会或挑战。例如，某个政策的出台是否会催生新的市场需求？某个社会趋势是否会让这个职业的价值被重估？请给出具体的分析和预测。)*
 
-### 3. 观念发展与价值演变
-*社会大众或行业内部对这个领域的价值观念正在发生什么变化？这个职业的社会意义或核心价值在未来会如何演变？*
+### 3. 行业观念发展与价值演变
+*(探讨行业内部和外部对这个职业的价值观念正在发生什么变化。这个职业的社会意义或核心价值在未来会如何演变？是从“工具执行者”变为“战略决策者”，还是从“技术实现者”变为“伦理守护者”？请结合具体现象进行论述，帮助用户理解其工作的长远意义。)*
 
 确保你的分析能帮助用户“比时代快一点点”，做出更明智的调整。你的所有回答都必须使用简体中文。
 """
@@ -174,12 +183,12 @@ async def research_job_service(target_job: str, profile_data: dict) -> str:
         except Exception as e:
             st.error(f"搜索查询 '{query}' 失败: {e}")
             
-    prompt_template_str = PERSONA_MODE_1 + """
+    prompt_template_str = """
         我选择了【{target_job}】。这是搜索到的信息摘要：
         ---
         {search_context}
         ---
-        请严格按照以下结构，生成一份关于【{target_job}】的详细研究报告：
+        请严格按照以下结构，生成一份关于【{target_job}】的详细研究报告，篇幅不少于400字：
         
         ### 1. 趋势与政策分析
         *(详细分析该行业的技术发展趋势、市场变化和相关的国家或地区政策)*
@@ -425,13 +434,12 @@ def render_mode1(db):
                     update_chat_history(db, user, "mode1", human_msg, raw_content)
                 st.success("分析完成！")
 
-    # [已优化] 清晰地展示分析文本和建议卡片
     if st.session_state.get('m1_raw_response'):
         st.markdown("---")
         st.subheader("AI导师的分析与建议")
         raw_content = st.session_state.m1_raw_response
         text_part = raw_content.split("```json")[0].strip()
-        st.markdown(text_part) # 使用markdown来渲染，以支持标题等格式
+        st.markdown(text_part)
 
         suggestions = st.session_state.get("m1_suggestions", [])
         if suggestions:
@@ -445,7 +453,6 @@ def render_mode1(db):
                         st.session_state.m1_job_to_research = s['title']
                         st.rerun()
 
-    # [已优化] 将手动输入作为补充选项
     st.markdown("---")
     with st.expander("或手动输入其他职业进行研究"):
         col1, col2 = st.columns([3, 1])
@@ -461,6 +468,9 @@ def render_mode1(db):
         with st.spinner(f"AI助理正在深入研究 '{final_target_job}'..."):
             try:
                 raw_report = asyncio.run(research_job_service(final_target_job, user.profile_data))
+                
+                st.session_state.m1_latest_report = raw_report
+                
                 text_content = raw_report.split("```json")[0].strip()
                 chart_data = extract_json_from_llm(raw_report)
                 
@@ -480,6 +490,28 @@ def render_mode1(db):
             except Exception as e:
                 st.error(f"研究失败: {e}")
         del st.session_state.m1_job_to_research
+
+    if 'm1_latest_report' in st.session_state:
+        st.markdown("---")
+        st.subheader("最新研究报告")
+        report_content = st.session_state.m1_latest_report
+        report_text = report_content.split("```json")[0].strip()
+        chart_data = extract_json_from_llm(report_content)
+        
+        st.markdown(report_text)
+        
+        if chart_data:
+            try:
+                if 'skill_importance' in chart_data and chart_data['skill_importance']:
+                    st.write("核心技能重要性:")
+                    chart_df = pd.DataFrame(chart_data['skill_importance'])
+                    st.bar_chart(chart_df.set_index('skill'))
+                if 'salary_range' in chart_data and chart_data['salary_range']:
+                    st.write("薪酬范围参考 (元/月):")
+                    salary_df = pd.DataFrame(chart_data['salary_range'])
+                    st.bar_chart(salary_df.set_index('level'))
+            except Exception as e:
+                st.warning(f"无法渲染图表: {e}")
 
     targets = db.query(CareerTarget).all()
     if targets:
@@ -695,7 +727,7 @@ def main():
         st.session_state.current_view = "导航看板"
 
     def clear_temp_states():
-        keys_to_clear = ['latest_feedback_analysis', 'latest_trends_report']
+        keys_to_clear = ['latest_feedback_analysis', 'latest_trends_report', 'm1_latest_report']
         for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
