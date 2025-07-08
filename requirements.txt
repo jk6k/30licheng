@@ -1,14 +1,6 @@
-langchain
-langchain-openai
-langchain-community
-python-dotenv
-PyPDF2
-pytesseract
-pdf2image
-Pillow
-streamlit==1.46.0
-streamlit-mermaid==0.3.0
+streamlit
 sqlalchemy
 python-dotenv
-serpapi-google-search
+langchain-openai
+google-search-results
 pandas
