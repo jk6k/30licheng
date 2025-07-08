@@ -1,6 +1,6 @@
 # streamlit_app.py
 # 职责: 一个完整的、单文件的Streamlit应用，整合了原FastAPI+React项目的所有核心功能。
-# 版本: 4.8 (优化模式切换引导)
+# 版本: 4.9 (优化模式二的交互工作流)
 
 import streamlit as st
 import os
@@ -117,12 +117,15 @@ PERSONA_MODE_1 = """
 ```
 在所有互动中，你必须始终应用【个人特质背景成长适切】和【发展趋势研究】两大原则进行提问和总结。你的所有回答都必须使用简体中文。
 """
+# [已优化] 为模式二增加了最终总结的指令
 PERSONA_MODE_2 = """
 你是一个清醒而犀利的职业决策教练，属于‘30历程’的【决策与评估】模块。你的任务是帮助用户戳破幻想，进行严格的现实检验。
 
-当你被要求**设计检验计划**时，请生成一份详细、可操作的计划，而不仅仅是简单的列表。计划应包含【职业访谈】和【现场观察】两大部分。在设计访谈时，你必须明确建议用户去接触两类最关键的人：一是具体负责招聘的业务主管，二是在该领域深耕15年以上（35-50岁）的资深人士。请详细阐述为什么要访谈这两类人，并为每一类提供3-5个有深度的、开放性的访谈问题建议。请用Markdown格式化你的回答，使其清晰易读。
+当你被要求**设计检验计划**时，请生成一份详细、可操作的计划，包含【职业访谈】和【现场观察】两大部分。在设计访谈时，你必须明确建议用户去接触两类最关键的人：一是具体负责招聘的业务主管，二是在该领域深耕15年以上（35-50岁）的资深人士。请详细阐述为什么要访谈这两类人，并为每一类提供3-5个有深度的、开放性的访谈问题建议。请用Markdown格式化你的回答，使其清晰易读。
 
-当你被要求**分析检验反馈**时，你的分析必须深刻、详细，不能满足于简单的复述。你的首要任务是通过苏格拉底式的提问，引导用户分辨其见闻中的‘事实’与‘观点’，并帮助他们探寻这份工作是否触动了其“个人特质背景成长适切”的“价值锚点”。请结合用户的原始画像和他们的反馈，进行全面的、富有洞察力的分析。
+当你被要求**分析检验反馈**时，你的首要任务是通过苏格拉底式的提问，引导用户分辨其见闻中的‘事实’与‘观点’，并帮助他们探寻这份工作是否触动了其“个人特质背景成长适切”的“价值锚点”。你的分析必须深刻、详细，不能满足于简单的复述。
+
+当你收到用户对你提问的**回应**后，你的任务是生成一份**最终的、总结性的评估报告**。这份报告应整合用户的初始反馈和他们对你问题的回应，帮助他们明确自己的‘价值锚点’，并就此职业目标给出一个明确的、可执行的决策建议（例如，“综合来看，这个方向非常适合你，建议激活”或“你需要警惕其中的XX挑战，建议在解决前暂时搁置”）。
 你的所有回答都必须使用简体中文。
 """
 PERSONA_MODE_3 = """
@@ -241,6 +244,17 @@ async def analyze_feedback_service(target_name: str, feedback: str) -> str:
         PERSONA_MODE_2 + "\n教练您好，我完成了对“{target_name}”的现实检验，以下是我的反馈：\n\n{feedback}\n\n请您基于我的反馈，进行详细的分析。")
     chain = prompt | llm
     response = await chain.ainvoke({"target_name": target_name, "feedback": feedback})
+    return response.content
+
+# [新增] 用于生成最终总结的服务函数
+async def generate_final_summary_service(target_name: str, conversation_history: str) -> str:
+    if not llm: return "LLM服务不可用。"
+    prompt = ChatPromptTemplate.from_template(
+        PERSONA_MODE_2 + 
+        "\n这是我与您关于“{target_name}”的完整对话记录：\n\n{conversation_history}\n\n请基于以上完整对话，为我生成一份最终的、总结性的评估报告。"
+    )
+    chain = prompt | llm
+    response = await chain.ainvoke({"target_name": target_name, "conversation_history": conversation_history})
     return response.content
 
 async def generate_action_plan_service(target_name: str, profile_data: dict, research_summary: str) -> str:
@@ -540,7 +554,6 @@ def render_mode1(db):
                     except Exception as e:
                         st.warning(f"无法渲染图表: {e}")
     
-    # [已修复] 在模式一末尾添加引导按钮
     is_mode2_enabled = any(t.status in ['researching', 'active', 'paused', 'planning_done'] for t in targets)
     if is_mode2_enabled:
         st.markdown("---")
@@ -562,7 +575,7 @@ def render_mode2(db):
         return
 
     target_options = {t.name: t for t in targets_for_eval}
-    selected_target_name = st.selectbox("选择一个目标进行评估", options=target_options.keys())
+    selected_target_name = st.selectbox("选择一个目标进行评估", options=target_options.keys(), key="m2_target_select")
     
     if selected_target_name:
         target = target_options[selected_target_name]
@@ -586,58 +599,76 @@ def render_mode2(db):
             st.markdown("---")
             with st.form("feedback_form"):
                 st.subheader("2. 记录检验反馈")
-                feedback_text = st.text_area("请在此详细记录您在访谈或观察中的见闻和感受...", height=200)
+                feedback_text = st.text_area("请在此详细记录您在访谈或观察中的见闻和感受...", height=150, key="m2_feedback_text")
                 submitted_feedback = st.form_submit_button("提交反馈并获取AI分析")
 
                 if submitted_feedback and feedback_text:
                     with st.spinner("AI教练正在分析您的反馈..."):
                         analysis = asyncio.run(analyze_feedback_service(target.name, feedback_text))
                         
-                        log_entry = ProgressLog(
-                            date=datetime.now(timezone.utc).isoformat(),
-                            log=f"【检验反馈】:\n{feedback_text}",
-                            target_name=target.name,
-                            user_id=user.id
-                        )
+                        log_entry = ProgressLog(date=datetime.now(timezone.utc).isoformat(), log=f"【检验反馈】:\n{feedback_text}", target_name=target.name, user_id=user.id)
                         db.add(log_entry)
                         
                         human_msg = f"这是我关于“{target.name}”的检验反馈：\n{feedback_text}"
                         update_chat_history(db, user, "mode2", human_msg, analysis)
                         
-                        st.session_state.latest_feedback_analysis = analysis
-                        
+                        st.session_state.m2_latest_analysis = analysis
                         st.success("反馈分析完成！")
             
-            if 'latest_feedback_analysis' in st.session_state:
+            if 'm2_latest_analysis' in st.session_state:
                 st.markdown("---")
-                st.subheader("AI教练的分析与洞察")
-                st.info(st.session_state.latest_feedback_analysis)
+                st.subheader("AI教练的分析与提问")
+                st.info(st.session_state.m2_latest_analysis)
 
+                # [已修复] 新增回应环节
+                with st.form("response_form"):
+                    st.subheader("3. 回应AI教练的提问")
+                    response_text = st.text_area("请在此回应AI教练提出的问题，进行更深入的思考...", height=150, key="m2_response_text")
+                    submitted_response = st.form_submit_button("提交回应以获得最终总结")
 
-        st.markdown("---")
-        st.subheader("3. 做出最终决策")
-        st.write("基于您的现实检验和AI分析，现在是时候对这个目标做出决策了。")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            if st.button("✅ 激活目标", use_container_width=True, help="将此目标设为积极追求状态，以进行下一步规划。"):
-                target.status = "active"
-                db.commit()
-                st.success(f"目标 '{target.name}' 已激活！")
-                st.rerun()
-        with col2:
-            if st.button("⏸️ 暂时搁置", use_container_width=True, help="暂时搁置此目标，以后可以重新评估。"):
-                target.status = "paused"
-                db.commit()
-                st.success(f"目标 '{target.name}' 已搁置。")
-                st.rerun()
-        with col3:
-            if st.button("❌ 彻底放弃", use_container_width=True, help="将此目标从您的列表中移除。"):
-                db.delete(target)
-                db.commit()
-                st.success(f"目标 '{target.name}' 已放弃并移除。")
-                st.rerun()
-    
+                    if submitted_response and response_text:
+                        with st.spinner("AI教练正在为您进行最终总结..."):
+                            initial_feedback = f"【我的初步反馈】:\n{feedback_text}\n\n【我对您问题的回应】:\n{response_text}"
+                            summary = asyncio.run(generate_final_summary_service(target.name, initial_feedback))
+                            
+                            log_entry = ProgressLog(date=datetime.now(timezone.utc).isoformat(), log=f"【对AI提问的回应】:\n{response_text}", target_name=target.name, user_id=user.id)
+                            db.add(log_entry)
+                            
+                            human_msg = f"这是我对我问题的回应：\n{response_text}"
+                            update_chat_history(db, user, "mode2", human_msg, summary)
+                            
+                            st.session_state.m2_final_summary = summary
+                            st.success("最终总结已生成！")
+
+            if 'm2_final_summary' in st.session_state:
+                st.markdown("---")
+                st.subheader("AI教练的最终总结与建议")
+                st.info(st.session_state.m2_final_summary)
+
+                st.markdown("---")
+                st.subheader("4. 做出最终决策")
+                st.write("基于以上完整的现实检验和AI分析，现在是时候对这个目标做出决策了。")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    if st.button("✅ 激活目标", use_container_width=True, help="将此目标设为积极追求状态，以进行下一步规划。"):
+                        target.status = "active"
+                        db.commit()
+                        st.success(f"目标 '{target.name}' 已激活！")
+                        st.rerun()
+                with col2:
+                    if st.button("⏸️ 暂时搁置", use_container_width=True, help="暂时搁置此目标，以后可以重新评估。"):
+                        target.status = "paused"
+                        db.commit()
+                        st.success(f"目标 '{target.name}' 已搁置。")
+                        st.rerun()
+                with col3:
+                    if st.button("❌ 彻底放弃", use_container_width=True, help="将此目标从您的列表中移除。"):
+                        db.delete(target)
+                        db.commit()
+                        st.success(f"目标 '{target.name}' 已放弃并移除。")
+                        st.rerun()
+
     is_mode3_enabled = any(t.status in ['active', 'planning_done'] for t in user.career_targets)
     if is_mode3_enabled:
         st.markdown("---")
@@ -762,7 +793,10 @@ def main():
         st.session_state.current_view = "导航看板"
 
     def clear_temp_states():
-        keys_to_clear = ['latest_feedback_analysis', 'latest_trends_report', 'm1_latest_report']
+        keys_to_clear = [
+            'm1_latest_report', 'm2_latest_analysis', 'm2_final_summary', 
+            'latest_feedback_analysis', 'latest_trends_report'
+        ]
         for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
