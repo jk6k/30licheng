@@ -1,6 +1,6 @@
 # streamlit_app.py
 # 职责: 一个完整的、单文件的Streamlit应用，整合了原FastAPI+React项目的所有核心功能。
-# 版本: 4.6 (深度优化所有模式的报告质量与细节)
+# 版本: 4.7 (修复APITimeoutError并优化错误处理)
 
 import streamlit as st
 import os
@@ -27,6 +27,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from openai import APITimeoutError # [已修复] 导入APITimeoutError以便捕获
 try:
     from serpapi import GoogleSearch
     SEARCH_TOOL_ENABLED = True
@@ -60,8 +61,8 @@ def check_services():
                 temperature=0.7,
                 api_key=LLM_API_KEY,
                 base_url=OPENAI_API_BASE,
-                max_retries=3,
-                timeout=30,
+                max_retries=2, # 减少重试次数，优先延长超时
+                timeout=60,    # [已修复] 将超时时间延长到60秒
             )
         except Exception as e:
             st.error(f"LLM 初始化失败: {e}")
@@ -77,7 +78,6 @@ def check_services():
     return True
 
 # --- 提示词 (Personas) ---
-# [已优化] 增强了所有提示词，要求更详细、结构化的输出，避免简略。
 PERSONA_MODE_1 = """
 你是一个顶级的职业探索与研究助理，属于‘30历程’的【目标研究】模块。你的风格需模仿一位经验丰富、直言不讳的职业导师。
 你的核心任务是：基于用户提供的个人画像，进行一次深入、全面、富有洞察力的分析，然后基于此分析，提出具体的职业建议。
@@ -134,8 +134,8 @@ PERSONA_MODE_3 = """
 ```json
 {{
     "plan_details": "对整个行动蓝图的总体描述，详细说明该计划的内在逻辑、关键成功因素，以及各个部分之间的关联性。",
-    "academic": "关于学业准备的详细清单和说明。例如：建议在大三前必须完成的核心课程列表、为了构建独特优势可以选修的课程方向、建议维持的GPA水平、为了深化理解必须阅读的3-5本经典书籍或论文等。",
-    "practice": "关于科研、竞赛、实习的详细清单和说明。例如：建议联系的校内实验室或教授、推荐参加的1-2个高含金量竞赛（并说明为什么）、如何通过不同渠道（如内推、招聘网站、寒暑期项目）寻找高质量实习，并给出简历建议。",
+    "academic": "关于学业准备的详细清单和说明。例如：核心课程、选修建议、GPA要求、为了深化理解必须阅读的3-5本经典书籍或论文等。",
+    "practice": "关于科研、竞赛、实习的详细清单和说明。例如：建议参与的实验室、推荐参加的1-2个高含金量竞赛（并说明为什么）、如何通过不同渠道（如内推、招聘网站、寒暑期项目）寻找高质量实习，并给出简历建议。",
     "skills": "关于学生干部、社团、志愿活动和社会资源利用的详细清单和说明。例如：建议在哪些活动中有意识地锻炼沟通、协作、领导力等软技能；推荐加入的能拓展相关人脉的社团；如何利用在线课程平台（如Coursera, edX）、行业会议、开源社区等资源进行自我提升。"
 }}
 ```
@@ -426,13 +426,18 @@ def render_mode1(db):
                 db.commit()
                 
                 with st.spinner("AI导师正在为您分析..."):
-                    raw_content = asyncio.run(generate_suggestions_service(updated_profile))
-                    st.session_state.m1_raw_response = raw_content
-                    parsed_json = extract_json_from_llm(raw_content)
-                    st.session_state.m1_suggestions = parsed_json.get("suggestions", []) if parsed_json else []
-                    human_msg = "这是我的个人画像，请分析并生成职业建议。"
-                    update_chat_history(db, user, "mode1", human_msg, raw_content)
-                st.success("分析完成！")
+                    try:
+                        raw_content = asyncio.run(generate_suggestions_service(updated_profile))
+                        st.session_state.m1_raw_response = raw_content
+                        parsed_json = extract_json_from_llm(raw_content)
+                        st.session_state.m1_suggestions = parsed_json.get("suggestions", []) if parsed_json else []
+                        human_msg = "这是我的个人画像，请分析并生成职业建议。"
+                        update_chat_history(db, user, "mode1", human_msg, raw_content)
+                        st.success("分析完成！")
+                    except APITimeoutError:
+                        st.error("AI服务响应超时，请稍后重试或检查您的网络连接。")
+                    except Exception as e:
+                        st.error(f"生成建议时发生错误: {e}")
 
     if st.session_state.get('m1_raw_response'):
         st.markdown("---")
@@ -487,6 +492,8 @@ def render_mode1(db):
                 human_msg = f"请为我研究 '{final_target_job}' 这个职业。"
                 update_chat_history(db, user, "mode1", human_msg, text_content)
                 st.success(f"'{final_target_job}' 的研究报告已生成并保存！")
+            except APITimeoutError:
+                st.error("AI服务响应超时，请稍后重试或检查您的网络连接。")
             except Exception as e:
                 st.error(f"研究失败: {e}")
         del st.session_state.m1_job_to_research
