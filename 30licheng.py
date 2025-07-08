@@ -1,6 +1,6 @@
 # streamlit_app.py
 # 职责: 一个完整的、单文件的Streamlit应用，整合了原FastAPI+React项目的所有核心功能。
-# 版本: 4.7 (修复APITimeoutError并优化错误处理)
+# 版本: 4.8 (优化模式切换引导)
 
 import streamlit as st
 import os
@@ -27,7 +27,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from openai import APITimeoutError # [已修复] 导入APITimeoutError以便捕获
+from openai import APITimeoutError
 try:
     from serpapi import GoogleSearch
     SEARCH_TOOL_ENABLED = True
@@ -61,8 +61,8 @@ def check_services():
                 temperature=0.7,
                 api_key=LLM_API_KEY,
                 base_url=OPENAI_API_BASE,
-                max_retries=2, # 减少重试次数，优先延长超时
-                timeout=60,    # [已修复] 将超时时间延长到60秒
+                max_retries=2,
+                timeout=60,
             )
         except Exception as e:
             st.error(f"LLM 初始化失败: {e}")
@@ -539,6 +539,16 @@ def render_mode1(db):
                             st.bar_chart(salary_df.set_index('level'))
                     except Exception as e:
                         st.warning(f"无法渲染图表: {e}")
+    
+    # [已修复] 在模式一末尾添加引导按钮
+    is_mode2_enabled = any(t.status in ['researching', 'active', 'paused', 'planning_done'] for t in targets)
+    if is_mode2_enabled:
+        st.markdown("---")
+        with st.container(border=True):
+            st.success("🎉 目标研究阶段已完成！您已对至少一个职业进行了初步研究。")
+            if st.button("前往下一步：模式二进行决策与评估 →", use_container_width=True):
+                st.session_state.current_view = "模式二：决策与评估"
+                st.rerun()
 
 def render_mode2(db):
     st.header("🤔 模式二：决策与评估")
@@ -613,7 +623,7 @@ def render_mode2(db):
             if st.button("✅ 激活目标", use_container_width=True, help="将此目标设为积极追求状态，以进行下一步规划。"):
                 target.status = "active"
                 db.commit()
-                st.success(f"目标 '{target.name}' 已激活！现在可以去模式三制定行动计划了。")
+                st.success(f"目标 '{target.name}' 已激活！")
                 st.rerun()
         with col2:
             if st.button("⏸️ 暂时搁置", use_container_width=True, help="暂时搁置此目标，以后可以重新评估。"):
@@ -626,6 +636,15 @@ def render_mode2(db):
                 db.delete(target)
                 db.commit()
                 st.success(f"目标 '{target.name}' 已放弃并移除。")
+                st.rerun()
+    
+    is_mode3_enabled = any(t.status in ['active', 'planning_done'] for t in user.career_targets)
+    if is_mode3_enabled:
+        st.markdown("---")
+        with st.container(border=True):
+            st.success("🎉 决策与评估阶段已完成！您已激活一个职业目标。")
+            if st.button("前往下一步：模式三制定行动计划 →", use_container_width=True):
+                st.session_state.current_view = "模式三：计划与行动"
                 st.rerun()
 
 def render_mode3(db):
@@ -673,6 +692,15 @@ def render_mode3(db):
             
             st.markdown("#### 🧩 学干社团与社会资源清单")
             st.markdown(plan.get("skills", "暂无内容"))
+
+    is_mode4_enabled = any(t.status == 'planning_done' for t in user.career_targets)
+    if is_mode4_enabled:
+        st.markdown("---")
+        with st.container(border=True):
+            st.success("🎉 计划与行动阶段已完成！您已为目标生成了行动蓝图。")
+            if st.button("前往下一步：模式四进行未来发展因应 →", use_container_width=True):
+                st.session_state.current_view = "模式四：未来发展因应"
+                st.rerun()
 
 def render_mode4(db):
     st.header("🔭 模式四：未来发展因应")
