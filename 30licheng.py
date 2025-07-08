@@ -1,6 +1,6 @@
 # streamlit_app.py
 # 职责: 一个完整的、单文件的Streamlit应用，整合了原FastAPI+React项目的所有核心功能。
-# 版本: 4.2 (优化模式四的报告显示体验)
+# 版本: 4.3 (修正“重要他人”的定义)
 
 import streamlit as st
 import os
@@ -19,6 +19,7 @@ os.environ["LANGCHAIN_ENDPOINT"] = ""
 os.environ["LANGCHAIN_API_KEY"] = ""
 os.environ["LANGCHAIN_PROJECT"] = ""
 
+
 # --- 依赖项 ---
 import pandas as pd
 from sqlalchemy import create_engine, Column, String, Text, ForeignKey, JSON
@@ -26,10 +27,8 @@ from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-
 try:
     from serpapi import GoogleSearch
-
     SEARCH_TOOL_ENABLED = True
 except ImportError:
     SEARCH_TOOL_ENABLED = False
@@ -48,12 +47,11 @@ SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY") or st.secrets.get("SERPAPI_API_KE
 llm = None
 search_tool = None
 
-
 def check_services():
     if not LLM_API_KEY or not OPENAI_API_BASE:
         st.error("错误：请在Streamlit Cloud的Secrets中设置 `LLM_API_KEY` 和 `OPENAI_API_BASE`。")
         return False
-
+    
     global llm
     if llm is None:
         try:
@@ -77,7 +75,6 @@ def check_services():
     else:
         st.warning("警告：`serpapi` 未安装。搜索功能已禁用。")
     return True
-
 
 # --- 提示词 (Personas) ---
 PERSONA_MODE_1 = """
@@ -136,7 +133,6 @@ PERSONA_MODE_4 = """
 确保你的分析能帮助用户“比时代快一点点”，做出更明智的调整。你的所有回答都必须使用简体中文。
 """
 
-
 # --- 服务函数 (LLM调用逻辑) ---
 async def generate_suggestions_service(profile_data: dict) -> str:
     if not llm: return "LLM服务不可用。"
@@ -148,7 +144,6 @@ async def generate_suggestions_service(profile_data: dict) -> str:
     profile_json_str = json.dumps(profile_data, ensure_ascii=False, indent=2)
     response = await chain.ainvoke({"profile_json": profile_json_str})
     return response.content
-
 
 async def research_job_service(target_job: str, profile_data: dict) -> str:
     if not llm: return "LLM服务不可用。"
@@ -163,7 +158,7 @@ async def research_job_service(target_job: str, profile_data: dict) -> str:
                 if snippet := result.get('snippet'): search_context += snippet + "\n\n"
         except Exception as e:
             st.error(f"搜索查询 '{query}' 失败: {e}")
-
+            
     prompt_template_str = PERSONA_MODE_1 + """
         我选择了【{target_job}】。这是搜索到的信息摘要：
         ---
@@ -191,7 +186,7 @@ async def research_job_service(target_job: str, profile_data: dict) -> str:
         }}
         ```
         用户画像参考: {profile_json}"""
-
+    
     prompt = ChatPromptTemplate.from_template(prompt_template_str)
     chain = prompt | llm
     profile_json_str = json.dumps(profile_data, ensure_ascii=False)
@@ -202,7 +197,6 @@ async def research_job_service(target_job: str, profile_data: dict) -> str:
     })
     return response.content
 
-
 async def generate_validation_plan_service(target_name: str) -> str:
     if not llm: return "LLM服务不可用。"
     prompt = ChatPromptTemplate.from_template(
@@ -211,7 +205,6 @@ async def generate_validation_plan_service(target_name: str) -> str:
     response = await chain.ainvoke({"target_name": target_name})
     return response.content
 
-
 async def analyze_feedback_service(target_name: str, feedback: str) -> str:
     if not llm: return "LLM服务不可用。"
     prompt = ChatPromptTemplate.from_template(
@@ -219,7 +212,6 @@ async def analyze_feedback_service(target_name: str, feedback: str) -> str:
     chain = prompt | llm
     response = await chain.ainvoke({"target_name": target_name, "feedback": feedback})
     return response.content
-
 
 async def generate_action_plan_service(target_name: str, profile_data: dict, research_summary: str) -> str:
     if not llm: return "LLM服务不可用。"
@@ -235,7 +227,6 @@ async def generate_action_plan_service(target_name: str, profile_data: dict, res
         "research_summary": research_summary or "无",
     })
     return response.content
-
 
 async def generate_trends_report_service(target_name: str) -> str:
     if not llm: return "LLM服务不可用。"
@@ -265,7 +256,6 @@ async def generate_trends_report_service(target_name: str) -> str:
 DATABASE_URL = "sqlite:///./30licheng_st.db"
 Base = declarative_base()
 
-
 class User(Base):
     __tablename__ = "users"
     id = Column(String, primary_key=True, default="main_user")
@@ -273,7 +263,6 @@ class User(Base):
     chat_history = Column(JSON, default=lambda: {})
     career_targets = relationship("CareerTarget", back_populates="user", cascade="all, delete-orphan")
     progress_logs = relationship("ProgressLog", back_populates="user", cascade="all, delete-orphan")
-
 
 class CareerTarget(Base):
     __tablename__ = "career_targets"
@@ -287,7 +276,6 @@ class CareerTarget(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False, default="main_user")
     user = relationship("User", back_populates="career_targets")
 
-
 class ProgressLog(Base):
     __tablename__ = "progress_logs"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -297,16 +285,13 @@ class ProgressLog(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False, default="main_user")
     user = relationship("User", back_populates="progress_logs")
 
-
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 
 @st.cache_resource
 def get_db_engine():
     Base.metadata.create_all(bind=engine)
     return engine
-
 
 # ==============================================================================
 # SECTION 3: 应用辅助函数
@@ -317,7 +302,6 @@ def get_db_session():
     db = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
     return db
 
-
 def get_user_session(db):
     user = db.query(User).filter_by(id="main_user").first()
     if not user:
@@ -326,7 +310,6 @@ def get_user_session(db):
         db.commit()
         db.refresh(user)
     return user
-
 
 def extract_json_from_llm(text_content: str) -> dict | None:
     match = re.search(r"```json\s*([\s\S]*?)\s*```", text_content)
@@ -338,19 +321,17 @@ def extract_json_from_llm(text_content: str) -> dict | None:
             return None
     return None
 
-
 def update_chat_history(db, user, mode_key, human_msg, ai_msg):
     history = user.chat_history or {}
     mode_history = history.get(mode_key, [])
     mode_history.append({"role": "user", "content": human_msg})
     mode_history.append({"role": "assistant", "content": ai_msg})
     history[mode_key] = mode_history
-
+    
     from sqlalchemy.orm.attributes import flag_modified
     flag_modified(user, "chat_history")
-
+    
     db.commit()
-
 
 # ==============================================================================
 # SECTION 4: Streamlit UI 渲染函数
@@ -359,7 +340,7 @@ def update_chat_history(db, user, mode_key, human_msg, ai_msg):
 def render_dashboard(db):
     st.header("🏠 导航看板")
     st.write("欢迎来到“30历程”，请选择您要进行的规划阶段。建议从“模式一”开始，循序渐进。")
-
+    
     user = get_user_session(db)
     targets = user.career_targets
 
@@ -368,49 +349,44 @@ def render_dashboard(db):
     is_mode4_enabled = is_mode3_enabled
 
     mode_info = [
-        {"icon": "🎯", "title": "模式一：目标研究", "desc": "探索内在特质与外部机会，确立并研究初步的职业目标。",
-         "enabled": True, "unlock_req": ""},
-        {"icon": "🤔", "title": "模式二：决策与评估", "desc": "通过现实检验方法，评估目标的真实性与个人匹配度。",
-         "enabled": is_mode2_enabled, "unlock_req": "完成模式一的目标研究后解锁"},
-        {"icon": "🚀", "title": "模式三：计划与行动", "desc": "将已验证的目标，分解为学业、实践等具体行动计划。",
-         "enabled": is_mode3_enabled, "unlock_req": "在模式二中激活一个目标后解锁"},
-        {"icon": "🔭", "title": "模式四：未来发展因应", "desc": "长期追踪进度，应对未来变化，动态调整您的职业路径。",
-         "enabled": is_mode4_enabled, "unlock_req": "在模式三中完成计划后解锁"},
+        {"icon": "🎯", "title": "模式一：目标研究", "desc": "探索内在特质与外部机会，确立并研究初步的职业目标。", "enabled": True, "unlock_req": ""},
+        {"icon": "🤔", "title": "模式二：决策与评估", "desc": "通过现实检验方法，评估目标的真实性与个人匹配度。", "enabled": is_mode2_enabled, "unlock_req": "完成模式一的目标研究后解锁"},
+        {"icon": "🚀", "title": "模式三：计划与行动", "desc": "将已验证的目标，分解为学业、实践等具体行动计划。", "enabled": is_mode3_enabled, "unlock_req": "在模式二中激活一个目标后解锁"},
+        {"icon": "🔭", "title": "模式四：未来发展因应", "desc": "长期追踪进度，应对未来变化，动态调整您的职业路径。", "enabled": is_mode4_enabled, "unlock_req": "在模式三中完成计划后解锁"},
     ]
 
     for info in mode_info:
         with st.container(border=True):
             col1, col2 = st.columns([1, 4])
             with col1:
-                st.markdown(f"<p style='font-size: 48px; text-align: center;'>{info['icon']}</p>",
-                            unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size: 48px; text-align: center;'>{info['icon']}</p>", unsafe_allow_html=True)
             with col2:
                 st.subheader(info['title'])
                 st.write(info['desc'])
-                if st.button(f"进入 {info['title']}", key=f"dash_{info['title']}", disabled=not info['enabled'],
-                             use_container_width=True):
+                if st.button(f"进入 {info['title']}", key=f"dash_{info['title']}", disabled=not info['enabled'], use_container_width=True):
                     st.session_state.current_view = info['title']
                     st.rerun()
                 if not info['enabled']:
                     st.caption(f"🔒 {info['unlock_req']}")
 
-
 def render_mode1(db):
     st.header("🎯 模式一：目标研究")
     st.write("在本模式中，我们将通过结构化分析，从自我探索开始，确立并研究您的潜在职业方向。")
-
+    
     user = get_user_session(db)
 
     with st.expander("第一步：完善您的个人画像", expanded=True):
         with st.form("profile_form"):
             profile_data = user.profile_data or {}
-            uniqueness = st.text_area("天赋、兴趣 (请用逗号分隔)",
+            uniqueness = st.text_area("天赋、兴趣 (请用逗号分隔)", 
                                       value=", ".join(profile_data.get("personal_uniqueness", [])))
             platform = st.text_input("大学平台、专业空间", value=profile_data.get("university_platform", ""))
-            others = st.text_input("重要他人：家人、师友的期望或建议",
-                                   value=profile_data.get("significant_others_input", ""))
+            
+            # [已修复] 更新了“重要他人”的标签文本
+            others = st.text_input("重要他人：能提供帮助或资源的人脉 (如师长、学长、家人等)", value=profile_data.get("significant_others_input", ""))
+            
             serendipity = st.text_area("机缘：对您产生特别影响的偶然经历", value=profile_data.get("serendipity", ""))
-
+            
             submitted = st.form_submit_button("保存画像并生成初步职业建议")
             if submitted:
                 updated_profile = {
@@ -421,7 +397,7 @@ def render_mode1(db):
                 }
                 user.profile_data = updated_profile
                 db.commit()
-
+                
                 with st.spinner("AI导师正在为您分析..."):
                     raw_content = asyncio.run(generate_suggestions_service(updated_profile))
                     st.session_state.m1_raw_response = raw_content
@@ -442,7 +418,7 @@ def render_mode1(db):
     st.subheader("第二步：执行纸面研究")
 
     suggestions = st.session_state.get("m1_suggestions", [])
-
+    
     col1, col2 = st.columns([3, 1])
     with col1:
         target_job_input = st.text_input("手动输入职业名称进行研究", key="m1_manual_job")
@@ -465,12 +441,12 @@ def render_mode1(db):
                 raw_report = asyncio.run(research_job_service(final_target_job, user.profile_data))
                 text_content = raw_report.split("```json")[0].strip()
                 chart_data = extract_json_from_llm(raw_report)
-
+                
                 target = db.query(CareerTarget).filter_by(name=final_target_job, user_id=user.id).first()
                 if not target:
                     target = CareerTarget(name=final_target_job, user_id=user.id)
                     db.add(target)
-
+                
                 target.research_report = text_content
                 target.research_chart_data = chart_data
                 target.status = "researching"
@@ -503,13 +479,12 @@ def render_mode1(db):
                     except Exception as e:
                         st.warning(f"无法渲染图表: {e}")
 
-
 def render_mode2(db):
     st.header("🤔 模式二：决策与评估")
     st.write("在本模式中，我们将通过现实检验来戳破幻想，并深入内心找到自己的“价值锚点”。")
-
+    
     user = get_user_session(db)
-
+    
     targets_for_eval = [t for t in user.career_targets if t.status in ['researching', 'active', 'paused']]
     if not targets_for_eval:
         st.info("请先在“模式一”中研究至少一个目标，才能开始决策与评估。")
@@ -517,10 +492,10 @@ def render_mode2(db):
 
     target_options = {t.name: t for t in targets_for_eval}
     selected_target_name = st.selectbox("选择一个目标进行评估", options=target_options.keys())
-
+    
     if selected_target_name:
         target = target_options[selected_target_name]
-
+        
         st.markdown("---")
         st.subheader(f"评估目标: **{target.name}**")
 
@@ -546,7 +521,7 @@ def render_mode2(db):
                 if submitted_feedback and feedback_text:
                     with st.spinner("AI教练正在分析您的反馈..."):
                         analysis = asyncio.run(analyze_feedback_service(target.name, feedback_text))
-
+                        
                         log_entry = ProgressLog(
                             date=datetime.now(timezone.utc).isoformat(),
                             log=f"【检验反馈】:\n{feedback_text}",
@@ -554,23 +529,24 @@ def render_mode2(db):
                             user_id=user.id
                         )
                         db.add(log_entry)
-
+                        
                         human_msg = f"这是我关于“{target.name}”的检验反馈：\n{feedback_text}"
                         update_chat_history(db, user, "mode2", human_msg, analysis)
-
+                        
                         st.session_state.latest_feedback_analysis = analysis
-
+                        
                         st.success("反馈分析完成！")
-
+            
             if 'latest_feedback_analysis' in st.session_state:
                 st.markdown("---")
                 st.subheader("AI教练的分析与洞察")
                 st.info(st.session_state.latest_feedback_analysis)
 
+
         st.markdown("---")
         st.subheader("3. 做出最终决策")
         st.write("基于您的现实检验和AI分析，现在是时候对这个目标做出决策了。")
-
+        
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             if st.button("✅ 激活目标", use_container_width=True, help="将此目标设为积极追求状态，以进行下一步规划。"):
@@ -591,7 +567,6 @@ def render_mode2(db):
                 st.success(f"目标 '{target.name}' 已放弃并移除。")
                 st.rerun()
 
-
 def render_mode3(db):
     st.header("🚀 模式三：计划与行动")
     st.write("在本模式中，我们将把已激活的职业目标，分解为具体、可执行的行动蓝图。")
@@ -608,37 +583,35 @@ def render_mode3(db):
 
     if selected_target_name:
         target = target_options[selected_target_name]
-
+        
         if not target.action_plan or isinstance(target.action_plan, str):
             if st.button(f"为“{target.name}”生成三合一行动蓝图"):
                 with st.spinner("AI规划师正在为您量身定制行动蓝图..."):
-                    raw_plan = asyncio.run(
-                        generate_action_plan_service(target.name, user.profile_data, target.research_report))
+                    raw_plan = asyncio.run(generate_action_plan_service(target.name, user.profile_data, target.research_report))
                     plan_json = extract_json_from_llm(raw_plan)
-
+                    
                     target.action_plan = plan_json
                     target.status = "planning_done"
                     db.commit()
-
+                    
                     human_msg = f"请为我的目标“{target.name}”生成行动蓝图。"
                     update_chat_history(db, user, "mode3", human_msg, raw_plan)
                     st.success("行动蓝图已生成！")
                     st.rerun()
-
+        
         if target.action_plan and isinstance(target.action_plan, dict):
             st.markdown("---")
             st.subheader(f"“{target.name}”的行动蓝图")
             plan = target.action_plan
-
+            
             st.markdown("#### 📚 学业清单")
             st.markdown(plan.get("academic", "暂无内容"))
-
+            
             st.markdown("#### 🏅 科研竞赛实习清单")
             st.markdown(plan.get("practice", "暂无内容"))
-
+            
             st.markdown("#### 🧩 学干社团与社会资源清单")
             st.markdown(plan.get("skills", "暂无内容"))
-
 
 def render_mode4(db):
     st.header("🔭 模式四：未来发展因应")
@@ -671,18 +644,15 @@ def render_mode4(db):
                     report = asyncio.run(generate_trends_report_service(selected_target_name))
                     human_msg = f"请为我的目标“{selected_target_name}”生成一份未来趋势洞察报告。"
                     update_chat_history(db, user, "mode4", human_msg, report)
-
-                    # [已修复] 将报告结果存入session_state以便立即显示
+                    
                     st.session_state.latest_trends_report = report
-
+                    
                     st.success("趋势报告已生成！")
-
-        # [已修复] 在按钮外部显示最新的报告结果
+        
         if 'latest_trends_report' in st.session_state:
             st.markdown("---")
             st.subheader("AI导航员的未来趋势洞察")
             st.info(st.session_state.latest_trends_report)
-
 
 # ==============================================================================
 # SECTION 5: 主应用逻辑
@@ -696,34 +666,30 @@ def main():
     if not check_services():
         st.stop()
 
-    get_db_engine()  # 初始化数据库引擎和表
+    get_db_engine()
     db = get_db_session()
 
-    # 初始化视图状态
     if "current_view" not in st.session_state:
         st.session_state.current_view = "导航看板"
 
-    # 清除特定模式的临时状态函数
     def clear_temp_states():
-        if 'latest_feedback_analysis' in st.session_state:
-            del st.session_state.latest_feedback_analysis
-        if 'latest_trends_report' in st.session_state:
-            del st.session_state.latest_trends_report
+        keys_to_clear = ['latest_feedback_analysis', 'latest_trends_report']
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
 
-    # 侧边栏导航
     with st.sidebar:
         st.title("导航")
         if st.button("🏠 导航看板", use_container_width=True):
             st.session_state.current_view = "导航看板"
             clear_temp_states()
-
+        
         st.markdown("---")
-
+        
         user_for_nav = get_user_session(db)
         targets_for_nav = user_for_nav.career_targets
-
-        is_mode2_enabled = any(
-            t.status in ['researching', 'active', 'paused', 'planning_done'] for t in targets_for_nav)
+        
+        is_mode2_enabled = any(t.status in ['researching', 'active', 'paused', 'planning_done'] for t in targets_for_nav)
         is_mode3_enabled = any(t.status in ['active', 'planning_done'] for t in targets_for_nav)
         is_mode4_enabled = is_mode3_enabled
 
@@ -738,13 +704,13 @@ def main():
             if st.button(item, use_container_width=True, disabled=not enabled):
                 st.session_state.current_view = item
                 clear_temp_states()
-
+        
         st.markdown("---")
         st.subheader("聊天历史")
         with st.expander("显示/隐藏当前模式聊天记录"):
             chat_history_data = user_for_nav.chat_history if isinstance(user_for_nav.chat_history, dict) else {}
             mode_key_map = {
-                "导航看板": "mode1",  # 默认显示模式一历史
+                "导航看板": "mode1",
                 "模式一：目标研究": "mode1",
                 "模式二：决策与评估": "mode2",
                 "模式三：计划与行动": "mode3",
@@ -752,7 +718,7 @@ def main():
             }
             current_mode_key = mode_key_map.get(st.session_state.current_view, "mode1")
             history_for_mode = chat_history_data.get(current_mode_key, [])
-
+            
             if not history_for_mode:
                 st.write("暂无聊天记录。")
             else:
@@ -761,7 +727,6 @@ def main():
                         display_content = message["content"].split("```json")[0].strip()
                         st.markdown(display_content)
 
-    # 主内容区渲染
     mode_render_map = {
         "导航看板": render_dashboard,
         "模式一：目标研究": render_mode1,
@@ -769,13 +734,12 @@ def main():
         "模式三：计划与行动": render_mode3,
         "模式四：未来发展因应": render_mode4,
     }
-
+    
     render_function = mode_render_map.get(st.session_state.current_view)
     if render_function:
         render_function(db)
-
+    
     db.close()
-
 
 if __name__ == "__main__":
     main()
