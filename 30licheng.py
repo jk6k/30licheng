@@ -1,6 +1,6 @@
 # streamlit_app.py
 # 职责: 一个完整的、单文件的Streamlit应用，整合了原FastAPI+React项目的所有核心功能。
-# 版本: 4.3 (修正“重要他人”的定义)
+# 版本: 4.4 (深度优化报告质量与UI工作流)
 
 import streamlit as st
 import os
@@ -77,24 +77,33 @@ def check_services():
     return True
 
 # --- 提示词 (Personas) ---
+# [已优化] 增强了所有提示词，要求更详细、结构化的输出。
 PERSONA_MODE_1 = """
-你是一个职业探索与研究助理，属于‘30历程’的【目标研究】模块。你的风格需模仿一位经验丰富、直言不讳的职业导师。
-你的任务是：在对用户画像进行总结分析后，提供职业建议。
+你是一个顶级的职业探索与研究助理，属于‘30历程’的【目标研究】模块。你的风格需模仿一位经验丰富、直言不讳的职业导师。
+你的任务是：基于用户画像，进行深入、详细、结构化的分析。分析后，提供至少3个具体的职业建议。
 你的输出必须严格遵循以下格式，其中JSON部分必须被包裹在一个完整的 ```json ... ``` 代码块中:
 
-这里是你的导师总结文本...
+### 个人画像深度分析
+*(在此处撰写详细的分析文本，使用Markdown格式，可以包含列表和重点。)*
+
+### 初步职业方向建议
+*(在此处撰写总结性的建议文本)*
 
 ```json
 {{
-  "summary": "这里是你的总结文本，内容应与上面的导师总结文本一致",
+  "summary": "这里是你对用户画像的总结文本，内容应与上面的分析文本一致",
   "suggestions": [
     {{
       "title": "职业建议1",
-      "reason": "推荐这个职业的具体理由1"
+      "reason": "推荐这个职业的具体、详细的理由"
     }},
     {{
       "title": "职业建议2",
-      "reason": "推荐这个职业的具体理由2"
+      "reason": "推荐这个职业的具体、详细的理由"
+    }},
+    {{
+      "title": "职业建议3",
+      "reason": "推荐这个职业的具体、详细的理由"
     }}
   ]
 }}
@@ -102,34 +111,40 @@ PERSONA_MODE_1 = """
 在所有互动中，你必须始终应用【个人特质背景成长适切】和【发展趋势研究】两大原则进行提问和总结。你的所有回答都必须使用简体中文。
 """
 PERSONA_MODE_2 = """
-你是一个清醒而犀利的职业决策教练，属于‘30历程’的【决策与评估】模块。你的任务是帮助用户戳破幻想，进行严格的现实检验。你的核心任务是：
-1.  **设计高效的检验计划**：引导用户设计包含【职业访谈】和【现场观察】的计划。在设计访谈时，你必须明确建议用户去接触两类最关键的人：一是具体负责招聘的业务主管，二是在该领域深耕15年以上（35-50岁）的资深人士。提醒用户，刚毕业的师兄师姐可能“连门都没摸到呢”。
-2.  **引导批判性思考**：在用户反馈访谈见闻后，你的首要追问必须是：“在这些对话中，哪些是毋庸置疑的‘事实’，哪些只是对方的‘观点’？”
-3.  **探寻深层价值**：引导用户反思这份工作是否符合其“个人特质背景成长适切”。你要帮助他们超越简单的性格标签（如I人E人），去寻找真正的“价值锚点”——即那种能带来核心成就感、让自己安身立命的东西。
+你是一个清醒而犀利的职业决策教练，属于‘30历程’的【决策与评估】模块。你的任务是帮助用户戳破幻想，进行严格的现实检验。
+当你被要求**设计检验计划**时，请生成一份详细、可操作的计划，包含【职业访谈】和【现场观察】两部分。在设计访谈时，你必须明确建议用户去接触两类最关键的人：一是具体负责招聘的业务主管，二是在该领域深耕15年以上（35-50岁）的资深人士。提醒用户，刚毕业的师兄师姐可能“连门都没摸到呢”。请用Markdown格式化你的回答，使其清晰易读。
+
+当你被要求**分析检验反馈**时，你的首要任务是通过苏格拉底式的提问，引导用户分辨其见闻中的‘事实’与‘观点’，并帮助他们探寻这份工作是否触动了其“个人特质背景成长适切”的“价值锚点”。你的分析必须深刻、详细，篇幅不少于300字。
 你的所有回答都必须使用简体中文。
 """
 PERSONA_MODE_3 = """
 你是一个精密的职业行动规划师，属于‘30历程’的【计划与行动】模块。你的任务不仅是制定计划，更是要向用户阐明每个行动背后的深刻逻辑。
-你的核心任务是：将一个已确立的职业目标，转化为一份结构化的行动蓝图。
+你的核心任务是：将一个已确立的职业目标，转化为一份结构化的、详细的、可操作的行动蓝图。
 你的输出必须严格遵循以下格式，其中JSON部分必须被包裹在一个完整的 ```json ... ``` 代码块中:
 
 ```json
 {{
-    "plan_details": "对整个行动蓝图的总体描述，可以为空字符串",
-    "academic": "关于学业准备的详细清单和说明",
-    "practice": "关于科研、竞赛、实习的详细清单和说明",
-    "skills": "关于学生干部、社团、志愿活动和社会资源利用的详细清单和说明"
+    "plan_details": "对整个行动蓝图的总体描述，详细说明该计划的内在逻辑和关键成功因素。",
+    "academic": "关于学业准备的详细清单和说明。例如：核心课程、选修建议、GPA要求、必读经典书籍等。",
+    "practice": "关于科研、竞赛、实习的详细清单和说明。例如：建议参与的实验室、推荐参加的竞赛、如何寻找高质量实习等。",
+    "skills": "关于学生干部、社团、志愿活动和社会资源利用的详细清单和说明。例如：建议锻炼的软技能、推荐加入的社团、如何利用学校或社会资源等。"
 }}
 ```
 确保每个清单都具有高度的可操作性，并与用户的大学专业背景紧密结合。你的所有回答都必须使用简体中文。
 """
 PERSONA_MODE_4 = """
-你是一个长期的职业生涯导航员，属于‘30历程’的【未来发展因应】模块。你的任务是帮助用户理解规划的动态性，并始终保持前瞻性。你的核心任务是：
-1.  **引导动态调整循环**：帮助用户追踪其行动计划的进度。当计划顺利时，引导其进行“达成与优化”的复盘；当遇到内外部变化时，引导其进行“变化与调整”的思考。你要让用户明白，规划是动态的，但绝不等于随波逐流。
-2.  **提供三维度的未来洞察**：当用户请求时，你需要主动监测并向他们报告与其职业领域相关的未来发展趋势。你的报告必须围绕以下三个核心维度展开：
-    * **技术趋势与学习**：有哪些新技术正在改变这个领域的工作方式？
-    * **环境变化**：国际局势、社会结构或自然环境的哪些变化可能带来机会或挑战？
-    * **观念发展**：社会大众或行业内部对这个领域的价值观念正在发生什么变化？
+你是一个长期的职业生涯导航员，属于‘30历程’的【未来发展因应】模块。你的任务是帮助用户理解规划的动态性，并始终保持前瞻性。
+当你被要求生成未来趋势报告时，你的报告必须详细、深刻，并严格围绕以下三个核心维度展开，使用Markdown标题进行组织：
+
+### 1. 技术趋势与学习路径
+*有哪些新技术正在改变这个领域的工作方式？为了保持竞争力，需要学习哪些新工具或新技能？*
+
+### 2. 环境变化与潜在机会
+*国际局势、社会结构或自然环境的哪些变化可能带来机会或挑战？新的市场或需求在哪里？*
+
+### 3. 观念发展与价值演变
+*社会大众或行业内部对这个领域的价值观念正在发生什么变化？这个职业的社会意义或核心价值在未来会如何演变？*
+
 确保你的分析能帮助用户“比时代快一点点”，做出更明智的调整。你的所有回答都必须使用简体中文。
 """
 
@@ -164,10 +179,16 @@ async def research_job_service(target_job: str, profile_data: dict) -> str:
         ---
         {search_context}
         ---
-        请严格按照以下结构，生成一份关于【{target_job}】的研究报告：
-        1. **趋势与政策分析**
-        2. **岗位胜任力模型**
-        3. **初步适切性评估**（结合用户画像）
+        请严格按照以下结构，生成一份关于【{target_job}】的详细研究报告：
+        
+        ### 1. 趋势与政策分析
+        *(详细分析该行业的技术发展趋势、市场变化和相关的国家或地区政策)*
+
+        ### 2. 岗位胜任力模型
+        *(详细列出该岗位的核心硬技能和软技能，并举例说明)*
+
+        ### 3. 初步适切性评估
+        *(结合用户画像，详细分析该职业与用户的匹配度，指出优势和潜在挑战)*
 
         在报告的末尾，请附带一个用于数据可视化的JSON代码块，不要包含任何解释性文字，格式如下：
         ```json
@@ -200,7 +221,7 @@ async def research_job_service(target_job: str, profile_data: dict) -> str:
 async def generate_validation_plan_service(target_name: str) -> str:
     if not llm: return "LLM服务不可用。"
     prompt = ChatPromptTemplate.from_template(
-        PERSONA_MODE_2 + "\n我的目标职业是“{target_name}”。请帮我设计一份高效的现实检验计划，包括建议的访谈问题、可行的观察渠道，并特别强调我应该访谈哪些类型的关键人物。")
+        PERSONA_MODE_2 + "\n我的目标职业是“{target_name}”。请帮我设计一份高效的现实检验计划。")
     chain = prompt | llm
     response = await chain.ainvoke({"target_name": target_name})
     return response.content
@@ -208,7 +229,7 @@ async def generate_validation_plan_service(target_name: str) -> str:
 async def analyze_feedback_service(target_name: str, feedback: str) -> str:
     if not llm: return "LLM服务不可用。"
     prompt = ChatPromptTemplate.from_template(
-        PERSONA_MODE_2 + "\n教练您好，我完成了对“{target_name}”的现实检验，以下是我的反馈：\n\n{feedback}\n\n请您基于我的反馈，通过苏格拉底式的提问，引导我分辨其中的‘事实’与‘观点’，并帮助我探寻这份工作是否触动了我的‘价值锚点’。")
+        PERSONA_MODE_2 + "\n教练您好，我完成了对“{target_name}”的现实检验，以下是我的反馈：\n\n{feedback}\n\n请您基于我的反馈，进行详细的分析。")
     chain = prompt | llm
     response = await chain.ainvoke({"target_name": target_name, "feedback": feedback})
     return response.content
@@ -243,7 +264,7 @@ async def generate_trends_report_service(target_name: str) -> str:
         except Exception as e:
             st.error(f"搜索查询 '{query}' 失败: {e}")
     prompt = ChatPromptTemplate.from_template(
-        PERSONA_MODE_4 + "\n我的目标是“{target_name}”。这是刚搜索到的相关信息：\n---\n{search_context}\n---\n请基于此，严格按照【技术趋势与学习】、【环境变化】和【观念发展】三个维度，为我生成一份深刻的未来趋势洞察报告。")
+        PERSONA_MODE_4 + "\n我的目标是“{target_name}”。这是刚搜索到的相关信息：\n---\n{search_context}\n---\n请基于此，为我生成一份深刻的未来趋势洞察报告。")
     chain = prompt | llm
     response = await chain.ainvoke({"target_name": target_name, "search_context": search_context or '无特定信息'})
     return response.content
@@ -381,10 +402,7 @@ def render_mode1(db):
             uniqueness = st.text_area("天赋、兴趣 (请用逗号分隔)", 
                                       value=", ".join(profile_data.get("personal_uniqueness", [])))
             platform = st.text_input("大学平台、专业空间", value=profile_data.get("university_platform", ""))
-            
-            # [已修复] 更新了“重要他人”的标签文本
             others = st.text_input("重要他人：能提供帮助或资源的人脉 (如师长、学长、家人等)", value=profile_data.get("significant_others_input", ""))
-            
             serendipity = st.text_area("机缘：对您产生特别影响的偶然经历", value=profile_data.get("serendipity", ""))
             
             submitted = st.form_submit_button("保存画像并生成初步职业建议")
@@ -407,32 +425,36 @@ def render_mode1(db):
                     update_chat_history(db, user, "mode1", human_msg, raw_content)
                 st.success("分析完成！")
 
+    # [已优化] 清晰地展示分析文本和建议卡片
     if st.session_state.get('m1_raw_response'):
         st.markdown("---")
         st.subheader("AI导师的分析与建议")
         raw_content = st.session_state.m1_raw_response
         text_part = raw_content.split("```json")[0].strip()
-        st.info(text_part)
+        st.markdown(text_part) # 使用markdown来渲染，以支持标题等格式
 
+        suggestions = st.session_state.get("m1_suggestions", [])
+        if suggestions:
+            st.markdown("---")
+            st.subheader("第二步：选择并研究一个职业目标")
+            for s in suggestions:
+                with st.container(border=True):
+                    st.markdown(f"**职业建议: {s['title']}**")
+                    st.write(s['reason'])
+                    if st.button(f"研究 '{s['title']}'", key=f"research_{s['title']}", use_container_width=True):
+                        st.session_state.m1_job_to_research = s['title']
+                        st.rerun()
+
+    # [已优化] 将手动输入作为补充选项
     st.markdown("---")
-    st.subheader("第二步：执行纸面研究")
-
-    suggestions = st.session_state.get("m1_suggestions", [])
-    
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        target_job_input = st.text_input("手动输入职业名称进行研究", key="m1_manual_job")
-    with col2:
-        st.write("")
-        st.write("")
-        if st.button("研究手动输入的目标", use_container_width=True, disabled=not target_job_input):
-            st.session_state.m1_job_to_research = target_job_input
-
-    if suggestions:
-        st.write("或从AI建议中选择：")
-        for s in suggestions:
-            if st.button(f"研究 '{s['title']}'", key=f"research_{s['title']}", use_container_width=True):
-                st.session_state.m1_job_to_research = s['title']
+    with st.expander("或手动输入其他职业进行研究"):
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            target_job_input = st.text_input("职业名称", key="m1_manual_job", label_visibility="collapsed")
+        with col2:
+            if st.button("研究此目标", use_container_width=True, disabled=not target_job_input):
+                st.session_state.m1_job_to_research = target_job_input
+                st.rerun()
 
     if 'm1_job_to_research' in st.session_state and st.session_state.m1_job_to_research:
         final_target_job = st.session_state.m1_job_to_research
